@@ -2,6 +2,11 @@ from flask import Flask, request, jsonify
 from educhain import Educhain
 from educhain.core import config
 from langchain.chat_models import ChatOpenAI
+from dotenv import load_dotenv
+import os
+
+# Load environment variables
+load_dotenv()
 
 # Replace with your OpenAI API credentials
 custom_template = """
@@ -15,7 +20,7 @@ Difficulty Level: {difficulty_level}
 llama = ChatOpenAI(
     model="llama-3.1-70b-versatile",
     openai_api_base="https://api.groq.com/openai/v1",
-    openai_api_key="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"  # Replace with your actual key
+    openai_api_key=os.getenv('GROQ_API_KEY')  # Replace with your actual key
 )
 
 llm_config = config.LLMConfig(
