@@ -77,5 +77,8 @@ This platform offers a suite of tools and features to enhance personalized learn
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-repo/domain-learning-platform.git
+   git clone https://github.com/Nidhish-714/StudySphere.git
    cd domain-learning-platform
+   pythom -m venv myenv
+   myenv\Scripts\activate
+   pip install -r requirements.txt
