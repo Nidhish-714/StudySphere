@@ -1,6 +1,5 @@
 import os
 from dotenv import load_dotenv
-from flask import Flask, request, jsonify
 import tempfile
 from langchain_groq import ChatGroq
 from langchain.chains import ConversationalRetrievalChain
@@ -11,8 +10,8 @@ from langchain.memory import ConversationBufferMemory
 from langchain.document_loaders import PyPDFLoader, TextLoader, Docx2txtLoader
 from langchain.prompts import PromptTemplate
 from educhain import Educhain, LLMConfig
-
-app = Flask(__name__)
+import streamlit as st
+from streamlit_chat import message
 
 # Load environment variables
 load_dotenv()
@@ -22,6 +21,7 @@ template = """
 You are an assistant specialized in analyzing documents. Your work is to provide topic of that document.
 Topic : 
 """
+
 topic_prompt = PromptTemplate(input_variables=["context", "question"], template=template)
 
 # Prompt Template for answering document questions
@@ -62,10 +62,10 @@ def create_conversational_chain(vector_store):
     )
     return chain
 
-def extract_document_topic(files):
+def extract_document_topic(uploaded_files):
     text = []
-    for file in files:
-        file_extension = os.path.splitext(file.filename)[1]
+    for file in uploaded_files:
+        file_extension = os.path.splitext(file.name)[1]
         with tempfile.NamedTemporaryFile(delete=False) as temp_file:
             temp_file.write(file.read())
             temp_file_path = temp_file.name
@@ -108,36 +108,63 @@ def generate_questions_based_on_topic(topic):
     questions = client.qna_engine.generate_questions(topic=topic, num=10)
     return questions
 
-# API to upload documents and extract the topic
-@app.route('/upload_documents', methods=['POST'])
-def upload_documents():
-    files = request.files.getlist('files')
-    document_topic, chain = extract_document_topic(files)
-    return jsonify({"document_topic": document_topic})
+def initialize_session_state():
+    if 'history' not in st.session_state:
+        st.session_state['history'] = []
 
-# API to chat with the document
-@app.route('/chat', methods=['POST'])
-def chat_with_document():
-    data = request.json
-    query = data.get("query")
-    history = data.get("history", [])
-    
-    # We need to recreate the chain from the stored vector store
-    chain = create_conversational_chain(vector_store)  # You will need to manage chain persistence in production
-    response = conversation_chat(query, chain, history)
-    
-    return jsonify({"response": response, "history": history})
+    if 'generated' not in st.session_state:
+        st.session_state['generated'] = ["Hello! Ask me anything about 🤗"]
 
-# API to generate quiz questions based on document topic
-@app.route('/generate_quiz', methods=['POST'])
-def generate_quiz():
-    data = request.json
-    document_topic = data.get("document_topic")
+    if 'past' not in st.session_state:
+        st.session_state['past'] = ["Hey! 👋"]
+
+def display_chat_history(chain):
+    reply_container = st.container()
+    container = st.container()
+
+    with container:
+        with st.form(key='my_form', clear_on_submit=True):
+            user_input = st.text_input("Question:", placeholder="Ask about your Documents", key='input')
+            submit_button = st.form_submit_button(label='Send')
+
+        if submit_button and user_input:
+            with st.spinner('Generating response...'):
+                output = conversation_chat(user_input, chain, st.session_state['history'])
+
+            st.session_state['past'].append(user_input)
+            st.session_state['generated'].append(output)
+
+    if st.session_state['generated']:
+        with reply_container:
+            for i in range(len(st.session_state['generated'])):
+                message(st.session_state["past"][i], is_user=True, key=str(i) + '_user', avatar_style="thumbs")
+                message(st.session_state["generated"][i], key=str(i), avatar_style="fun-emoji")
+
+def main():
+    load_dotenv()
+    initialize_session_state()
     
-    # Generate questions
-    questions = generate_questions_based_on_topic(document_topic)
+    st.title("Document ChatBot with Quiz Generation :books:")
+    st.sidebar.title("Document Processing")
     
-    return jsonify({"questions": questions.json()})
+    uploaded_files = st.sidebar.file_uploader("Upload files", accept_multiple_files=True)
+    
+    if uploaded_files:
+        # Extract the document topic and chain for chat
+        document_topic, chain = extract_document_topic(uploaded_files)
+        st.write(f"Extracted Document Topic: {document_topic}")
+        
+        # Let the user choose between Chat or Quiz
+        option = st.radio("What would you like to do?", ("Chat with the document", "Generate a quiz"))
+
+        if option == "Chat with the document":
+            display_chat_history(chain)
+        
+        elif option == "Generate a quiz":
+            # Generate questions based on the document topic
+            questions = generate_questions_based_on_topic(document_topic)
+            st.write(f"Generated Questions: {questions.json()}")
+            # questions.json
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    main()

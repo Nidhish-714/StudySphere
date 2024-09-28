@@ -9,3 +9,4 @@ langchain-groq
 streamlit
 qdrant-client
 torch
+educhain
